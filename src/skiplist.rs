@@ -13,12 +13,13 @@
 //    limitations under the License.
 
 use std::collections::LinkedList;
+use std::collections::BinaryHeap;
 
 struct ProxyNode {
     keys : Vec<u32>
 }
 
-struct SkipList {
+pub struct SkipList {
     max_level: usize,
     skip: usize,
     proxy_lane: Vec<ProxyNode>,
@@ -30,7 +31,7 @@ struct SkipList {
 
 impl SkipList {
 
-    pub fn new(max_level: usize, skip: usize) -> SkipList {
+    pub fn new(max_level: usize, skip: usize, keys: &[u32]) -> SkipList {
 
         // build the fast lanes
         let mut items_per_level = vec![0; max_level];
@@ -46,7 +47,8 @@ impl SkipList {
             flane_size += items_per_level[level];
         }
 
-        SkipList {
+        // create the SkipList datastructure
+        let mut result = SkipList {
             max_level: max_level,
             skip: if skip > 1 {skip} else {2},
             proxy_lane: Vec::with_capacity(flane_size),
@@ -54,12 +56,25 @@ impl SkipList {
             nodes : LinkedList::new(),
             items_per_level: items_per_level,
             start_of_fast_lanes: start_of_fast_lanes,
+        };
+
+        // sort the keys by inserting them into a binary heap
+        let mut heap = BinaryHeap::new();
+        for k in keys {
+            heap.push(k);
         }
+
+        // insert each key (in sorted order)
+        for k in heap {
+            result.insert_sorted_bulk(k)
+        }
+
+        // return the result
+        result
     }
 
-    fn insert_bulk(&mut self, key: i32) {
-        self.max_level = 0;
-        unimplemented!();
+    fn insert_sorted_bulk(&mut self, key: &u32) {
+       self.nodes.push_back(key.clone()); 
     }
 }
 
@@ -68,7 +83,8 @@ mod tests {
 
     #[test]
     fn insert() {
-        let slist = SkipList::new();
+        let vals = [2,1,3,10,0];
+        let slist = super::SkipList::new(9,5, &vals);
         
     }
 }
