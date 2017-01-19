@@ -27,6 +27,10 @@ pub struct SkipList {
     proxy_lane: Vec<ProxyNode>,
     #[allow(dead_code)]
     linearized_fast_lanes: Vec<u32>,
+    #[allow(dead_code)]
+    level_start_pos: Vec<usize>,
+    #[allow(dead_code)]
+    level_num_items: Vec<usize>,
     nodes: Vec<u32>,
 }
 
@@ -66,9 +70,13 @@ impl SkipList {
         // add the last proxy as well
         proxy_lane.push(current_proxy);
 
+        let mut level_start_pos = vec![0; max_level];
+        let mut level_num_items = vec![0; max_level];
         // linearize all the fast lanes
         let mut linearized_fast_lanes = Vec::<u32>::new();
         for level in max_level..0 {
+            level_start_pos[level] = linearized_fast_lanes.len();
+            level_num_items[level] = fast_lane_buffer[level].len();
             linearized_fast_lanes.append(&mut fast_lane_buffer[level]);
         }
 
@@ -80,6 +88,8 @@ impl SkipList {
             proxy_lane: proxy_lane,
             linearized_fast_lanes: linearized_fast_lanes,
             nodes: nodes,
+            level_start_pos: level_start_pos,
+            level_num_items: level_num_items,
         };
     }
 
