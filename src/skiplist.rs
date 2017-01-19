@@ -12,97 +12,80 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 
-use std::collections::LinkedList;
-use std::collections::BinaryHeap;
+const MAX_SKIP: usize = 5;
 
 struct ProxyNode {
     keys: Vec<u32>,
 }
 
 pub struct SkipList {
+    #[allow(dead_code)]
     max_level: usize,
+    #[allow(dead_code)]
     skip: usize,
+    #[allow(dead_code)]
     proxy_lane: Vec<ProxyNode>,
-    fast_lanes: Vec<u32>,
+    #[allow(dead_code)]
+    linearized_fast_lanes: Vec<u32>,
     nodes: Vec<u32>,
-    max_items_per_level: Vec<usize>,
-    start_of_fast_lanes: Vec<usize>,
-    num_items_per_level: Vec<usize>,
 }
 
 impl SkipList {
     pub fn new(max_level: usize, skip: usize, keys: &[u32]) -> SkipList {
 
-        // build the fast lanes
-        let mut max_items_per_level = vec![0; max_level];
-        let mut start_of_fast_lanes = vec![0; max_level];
-        let mut fast_lane_size = 16 as usize;
-
-        max_items_per_level[max_level - 1] = fast_lane_size;
-        start_of_fast_lanes[max_level - 1] = 0;
-
-        for level in (max_level - 2)..0 {
-            max_items_per_level[level] = max_items_per_level[level + 1] * skip;
-            start_of_fast_lanes[level] = start_of_fast_lanes[level + 1] +
-                                         max_items_per_level[level + 1];
-            fast_lane_size += max_items_per_level[level];
-        }
-
-        // create the SkipList datastructure
-        let mut result = SkipList {
-            max_level: max_level,
-            skip: if skip > 1 { skip } else { 2 },
-            proxy_lane: Vec::with_capacity(fast_lane_size),
-            fast_lanes: vec![u32::max_value(); fast_lane_size],
-            nodes: Vec::<u32>::with_capacity(keys.len()),
-            max_items_per_level: max_items_per_level,
-            start_of_fast_lanes: start_of_fast_lanes,
-            num_items_per_level: vec![0, max_level],
-        };
-
         // sort the keys by inserting them into a binary heap
-        let mut copyKeys = keys.to_vec();
-        copyKeys.sort();
+        let mut copy_keys = keys.to_vec();
+        copy_keys.sort();
 
-        // insert each key (in sorted order)    
-        for k in copyKeys {
-            result.insert_sorted_bulk(&k)
-        }
+        let filtered_skip = if skip > MAX_SKIP {MAX_SKIP} else if skip < 2 {2} else {skip};
 
-        // return the result
-        result
-    }
+        // build the initial separated fast lanes
+        let mut fast_lane_buffer = vec![Vec::<u32>::new(); max_level];
+        let mut nodes = Vec::<u32>::new();
+        let mut proxy_lane = Vec::<ProxyNode>::new();
 
-    fn insert_sorted_bulk(&mut self, key: &u32) {
-        self.nodes.push(key.clone());
+        // insert each key into the corresponding fast lanes
+        let mut current_proxy = ProxyNode {keys: Vec::<u32>::with_capacity(filtered_skip)};
 
-        let mut anything_inserted = false;
-        let mut insert_success = true;
-        for l in 0..self.max_level {
-            if (self.nodes.len() % self.skip.pow((l + 1) as u32)) == 0 && insert_success {
-                insert_success = self.insert_fast_lane(l, key);
-                anything_inserted = true;
-            } else {
-                break;
+        for k in copy_keys {
+            nodes.push(k);
+            for l in 0..max_level {
+                if (nodes.len() % filtered_skip.pow((l + 1) as u32)) == 0 {
+                    fast_lane_buffer[l].push(k);
+                } else {
+                    break;
+                }
+            }
+            // insert into proxy lane            
+            current_proxy.keys.push(k);
+            if nodes.len() % filtered_skip == (filtered_skip-1) {
+                proxy_lane.push(current_proxy);
+                current_proxy = ProxyNode {keys: Vec::<u32>::with_capacity(filtered_skip)};
             }
         }
+        // add the last proxy as well
+        proxy_lane.push(current_proxy);
 
-        if !anything_inserted {
-            //TODO: insert into proxy lane
-//            self.proxy_lane.insert()
+        // linearize all the fast lanes
+        let mut linearized_fast_lanes = Vec::<u32>::new();
+        for level in max_level..0 {
+            linearized_fast_lanes.append(&mut fast_lane_buffer[level]);
         }
 
+
+        // create the SkipList datastructure
+        return SkipList {
+            max_level: max_level,
+            skip: filtered_skip,
+            proxy_lane: proxy_lane,
+            linearized_fast_lanes: linearized_fast_lanes,
+            nodes: nodes,
+        };
     }
 
-    fn insert_fast_lane(&mut self, level: usize, key: &u32) -> bool {
-        let fastlane_idx = self.start_of_fast_lanes[level] + self.num_items_per_level[level];
-        let level_limit = self.start_of_fast_lanes[level] + self.max_items_per_level[level];
-
-        false
-    }
 
     pub fn get_nodes(&self) -> &[u32] {
-        &self.nodes
+        return &self.nodes
     }
 }
 
