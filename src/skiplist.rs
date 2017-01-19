@@ -31,7 +31,7 @@ pub struct SkipList {
 
 fn binary_search(key: u32, lane: &[u32]) -> usize {
     let mut first = 0;
-    let mut last = lane.len();
+    let mut last = lane.len() - 1;
 
     while first <= last {
         let middle = (first + last) / 2;
@@ -45,11 +45,7 @@ fn binary_search(key: u32, lane: &[u32]) -> usize {
     }
 
     // exact key not found, return the nearest starting point
-    if first > last {
-        return last
-    } else {
-        return 0
-    }
+    if first > last { return last } else { return 0 }
 }
 
 impl SkipList {
@@ -59,7 +55,13 @@ impl SkipList {
         let mut copy_keys = keys.to_vec();
         copy_keys.sort();
 
-        let filtered_skip = if skip > MAX_SKIP {MAX_SKIP} else if skip < 2 {2} else {skip};
+        let filtered_skip = if skip > MAX_SKIP {
+            MAX_SKIP
+        } else if skip < 2 {
+            2
+        } else {
+            skip
+        };
 
         // build the initial separated fast lanes
         let mut fast_lane_buffer = vec![Vec::<u32>::new(); max_level];
@@ -67,22 +69,23 @@ impl SkipList {
         let mut proxy_lane = Vec::<ProxyNode>::new();
 
         // insert each key into the corresponding fast lanes
-        let mut current_proxy = ProxyNode {keys: Vec::<u32>::with_capacity(filtered_skip)};
+        let mut current_proxy = ProxyNode { keys: Vec::<u32>::with_capacity(filtered_skip) };
 
         for k in copy_keys {
+            let idx_item = nodes.len();
             nodes.push(k);
             for l in 0..max_level {
-                if (nodes.len() % filtered_skip.pow((l + 1) as u32)) == 0 {
+                if (idx_item % filtered_skip.pow((l + 1) as u32)) == 0 {
                     fast_lane_buffer[l].push(k);
                 } else {
                     break;
                 }
             }
-            // insert into proxy lane            
+            // insert into proxy lane
             current_proxy.keys.push(k);
-            if nodes.len() % filtered_skip == (filtered_skip-1) {
+            if idx_item % filtered_skip == (filtered_skip - 1) {
                 proxy_lane.push(current_proxy);
-                current_proxy = ProxyNode {keys: Vec::<u32>::with_capacity(filtered_skip)};
+                current_proxy = ProxyNode { keys: Vec::<u32>::with_capacity(filtered_skip) };
             }
         }
         // add the last proxy as well
@@ -92,7 +95,7 @@ impl SkipList {
         let mut level_num_items = vec![0; max_level];
         // linearize all the fast lanes
         let mut linearized_fast_lanes = Vec::<u32>::new();
-        for level in max_level..0 {
+        for level in (0..max_level).rev() {
             level_start_pos[level] = linearized_fast_lanes.len();
             level_num_items[level] = fast_lane_buffer[level].len();
             linearized_fast_lanes.append(&mut fast_lane_buffer[level]);
@@ -113,34 +116,38 @@ impl SkipList {
 
 
     pub fn get_nodes(&self) -> &[u32] {
-        return &self.nodes
+        return &self.nodes;
     }
 
 
     pub fn find(&self, key: u32) -> Option<usize> {
-        
+
         // binary search for the starting position in the top lane
-        let top_start_pos = self.level_start_pos[0];
-        let top_end_pos = top_start_pos + self.level_num_items[0];
-        let top_lane = &self.linearized_fast_lanes[top_start_pos .. top_end_pos];
+        let top_start_pos = self.level_start_pos[self.max_level - 1];
+        let top_end_pos = top_start_pos + self.level_num_items[self.max_level - 1];
+        let top_lane = &self.linearized_fast_lanes[top_start_pos..top_end_pos];
         let mut pos = top_start_pos + binary_search(key, top_lane);
-        
-        for level in self.max_level-1..0 {
+
+        for level in (0..(self.max_level - 1)).rev() {
             let mut relative_pos = pos - self.level_start_pos[level];
-            while key >= self.linearized_fast_lanes[pos+1] {
+            while relative_pos < self.level_num_items[level] &&
+                  key >= self.linearized_fast_lanes[pos + 1] {
                 pos += 1;
                 relative_pos += 1;
             }
-            if level == 0 {break;}
+            if level == 0 {
+                break;
+            }
             // reset the pos to the next level offset
-            pos = self.level_start_pos[level-1] + self.skip * relative_pos; 
+            pos = self.level_start_pos[level - 1] + self.skip * relative_pos;
         }
         let relative_pos = pos - self.level_start_pos[0];
+
         if key == self.linearized_fast_lanes[pos] {
             // the key is directly included in  the level 1 fast lane, calculate the position of the key in the original list
             return Some(self.skip * relative_pos);
         };
-        // get the proxy node and find the key inside it 
+        // get the proxy node and find the key inside it
         let proxy = &self.proxy_lane[pos - self.level_start_pos[0]];
         for i in 1..proxy.keys.len() {
             if key == proxy.keys[i] {
@@ -157,15 +164,28 @@ mod tests {
     #[test]
     fn insert_retrieve_sorted() {
         let vals = [2, 1, 3, 10, 0];
-        let slist = super::SkipList::new(9, 5, &vals);
+        let slist = super::SkipList::new(3, 2, &vals);
 
         let sorted = slist.get_nodes();
-        
+
         assert_eq!(0, sorted[0]);
         assert_eq!(1, sorted[1]);
         assert_eq!(2, sorted[2]);
         assert_eq!(3, sorted[3]);
         assert_eq!(10, sorted[4]);
+
+    }
+
+    #[test]
+    fn find_single() {
+        let vals = [2, 1, 3, 10, 0];
+        let slist = super::SkipList::new(3, 2, &vals);
+
+        assert_eq!(Some(0), slist.find(2));
+        assert_eq!(Some(1), slist.find(1));
+        assert_eq!(Some(2), slist.find(3));
+        assert_eq!(Some(3), slist.find(10));
+        assert_eq!(Some(4), slist.find(0));
 
     }
 }
