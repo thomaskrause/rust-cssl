@@ -61,14 +61,12 @@ impl SkipList {
         };
 
         // sort the keys by inserting them into a binary heap
-        let mut heap = BinaryHeap::new();
-        for k in keys {
-            heap.push(k);
-        }
+        let mut copyKeys = keys.to_vec();
+        copyKeys.sort();
 
-        // insert each key (in sorted order)
-        for k in heap {
-            result.insert_sorted_bulk(k)
+        // insert each key (in sorted order)    
+        for k in copyKeys {
+            result.insert_sorted_bulk(&k)
         }
 
         // return the result
