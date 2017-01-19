@@ -19,19 +19,37 @@ struct ProxyNode {
 }
 
 pub struct SkipList {
-    #[allow(dead_code)]
     max_level: usize,
-    #[allow(dead_code)]
     skip: usize,
-    #[allow(dead_code)]
     proxy_lane: Vec<ProxyNode>,
-    #[allow(dead_code)]
     linearized_fast_lanes: Vec<u32>,
-    #[allow(dead_code)]
     level_start_pos: Vec<usize>,
-    #[allow(dead_code)]
     level_num_items: Vec<usize>,
     nodes: Vec<u32>,
+}
+
+
+fn binary_search(key: u32, lane: &[u32]) -> usize {
+    let mut first = 0;
+    let mut last = lane.len();
+
+    while first <= last {
+        let middle = (first + last) / 2;
+        if lane[middle] < key {
+            first = middle + 1;
+        } else if lane[middle] == key {
+            return middle;
+        } else {
+            last = middle - 1;
+        }
+    }
+
+    // exact key not found, return the nearest starting point
+    if first > last {
+        return last
+    } else {
+        return 0
+    }
 }
 
 impl SkipList {
@@ -96,6 +114,40 @@ impl SkipList {
 
     pub fn get_nodes(&self) -> &[u32] {
         return &self.nodes
+    }
+
+
+    pub fn find(&self, key: u32) -> Option<usize> {
+        
+        // binary search for the starting position in the top lane
+        let top_start_pos = self.level_start_pos[0];
+        let top_end_pos = top_start_pos + self.level_num_items[0];
+        let top_lane = &self.linearized_fast_lanes[top_start_pos .. top_end_pos];
+        let mut pos = top_start_pos + binary_search(key, top_lane);
+        
+        for level in self.max_level-1..0 {
+            let mut relative_pos = pos - self.level_start_pos[level];
+            while key >= self.linearized_fast_lanes[pos+1] {
+                pos += 1;
+                relative_pos += 1;
+            }
+            if level == 0 {break;}
+            // reset the pos to the next level offset
+            pos = self.level_start_pos[level-1] + self.skip * relative_pos; 
+        }
+        let relative_pos = pos - self.level_start_pos[0];
+        if key == self.linearized_fast_lanes[pos] {
+            // the key is directly included in  the level 1 fast lane, calculate the position of the key in the original list
+            return Some(self.skip * relative_pos);
+        };
+        // get the proxy node and find the key inside it 
+        let proxy = &self.proxy_lane[pos - self.level_start_pos[0]];
+        for i in 1..proxy.keys.len() {
+            if key == proxy.keys[i] {
+                return Some((self.skip * relative_pos) + i);
+            }
+        }
+        return None;
     }
 }
 
