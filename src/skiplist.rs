@@ -23,7 +23,9 @@ pub struct SkipList {
     max_level: usize,
     skip: usize,
     proxy_lane: Vec<ProxyNode>,
-    fast_lanes: Vec<Vec<u32>>,
+    linearized_fast_lanes: Vec<u32>,
+    fast_lane_start: Vec<usize>,
+    fast_lane_end: Vec<usize>,
     nodes: Vec<u32>,
 }
 
@@ -85,6 +87,8 @@ impl SkipList {
             }
         }
 
+        // make sure each vector is a multiple of MIN_FAST_LANE_SIZE
+        let mut sum_fast_line_size = 0;
         for i in 0..fast_lanes.len() {
             let lane = &mut fast_lanes[i];
             let modulo = lane.len() % MIN_FAST_LANE_SIZE;
@@ -93,19 +97,31 @@ impl SkipList {
                     lane.push(u32::max_value())
                 }
             }
-
+            sum_fast_line_size += lane.len();
         }
 
         // add the last proxy as well
         proxy_lane.push(current_proxy);
 
+        // linearize the fast lanes into one array
+        let mut linearized_fast_lanes = Vec::<u32>::with_capacity(sum_fast_line_size);
+        let mut fast_lane_start = vec![0; max_level];
+        let mut fast_lane_end = vec![0; max_level];
+
+        for i in 0..fast_lanes.len() {
+            fast_lane_start[i] = linearized_fast_lanes.len();
+            linearized_fast_lanes.append(&mut fast_lanes[i]);
+            fast_lane_end[i] = linearized_fast_lanes.len();
+        }
 
         // create the SkipList datastructure
         return SkipList {
             max_level: max_level,
             skip: filtered_skip,
             proxy_lane: proxy_lane,
-            fast_lanes: fast_lanes,
+            linearized_fast_lanes: linearized_fast_lanes,
+            fast_lane_start: fast_lane_start,
+            fast_lane_end: fast_lane_end,
             nodes: nodes,
         };
     }
@@ -113,19 +129,22 @@ impl SkipList {
     pub fn find(&self, key: u32) -> Option<usize> {
 
         // binary search for the starting position in the top lane
-        let mut pos = binary_search(key, &self.fast_lanes[self.max_level - 1]);
+        let top_lane = &self.linearized_fast_lanes[self.fast_lane_start[self.max_level - 1]..self.fast_lane_end[self.max_level - 1]];
+        let mut pos = binary_search(key, top_lane);
 
         for level in (0..(self.max_level - 1)).rev() {
             pos = self.skip * pos;
-            while pos < self.fast_lanes[level].len() && key >= self.fast_lanes[level][pos + 1] {
+            let lane =  &self.linearized_fast_lanes[self.fast_lane_start[level]..self.fast_lane_end[level]];
+            while pos < lane.len() && key >= lane[pos + 1] {
                 pos += 1;
             }
         }
 
-        if key == self.fast_lanes[0][pos] {
+        let bottom_lane = &self.linearized_fast_lanes[self.fast_lane_start[0]..self.fast_lane_end[0]];
+        if key == bottom_lane[pos] {
             // the key is directly included in  the level 1 fast lane, calculate the position of the key in the original list
             return Some(self.skip * pos);
-        };
+        }
         // get the proxy node and find the key inside it
         let proxy = &self.proxy_lane[pos];
         for i in 1..proxy.keys.len() {
