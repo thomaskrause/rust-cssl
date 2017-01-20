@@ -13,6 +13,7 @@
 //    limitations under the License.
 
 const MAX_SKIP: usize = 5;
+const MIN_FAST_LANE_SIZE: usize = 16;
 
 struct ProxyNode {
     keys: Vec<u32>,
@@ -22,9 +23,7 @@ pub struct SkipList {
     max_level: usize,
     skip: usize,
     proxy_lane: Vec<ProxyNode>,
-    linearized_fast_lanes: Vec<u32>,
-    level_start_pos: Vec<usize>,
-    level_num_items: Vec<usize>,
+    fast_lanes: Vec<Vec<u32>>,
     nodes: Vec<u32>,
 }
 
@@ -49,11 +48,8 @@ fn binary_search(key: u32, lane: &[u32]) -> usize {
 }
 
 impl SkipList {
-    pub fn new(max_level: usize, skip: usize, keys: &[u32]) -> SkipList {
+    pub fn new(max_level: usize, skip: usize, sorted_keys: &[u32]) -> SkipList {
 
-        // sort the keys by inserting them into a binary heap
-        let mut copy_keys = keys.to_vec();
-        copy_keys.sort();
 
         let filtered_skip = if skip > MAX_SKIP {
             MAX_SKIP
@@ -64,42 +60,44 @@ impl SkipList {
         };
 
         // build the initial separated fast lanes
-        let mut fast_lane_buffer = vec![Vec::<u32>::new(); max_level];
+        let mut fast_lanes = vec![Vec::<u32>::new(); max_level];
         let mut nodes = Vec::<u32>::new();
         let mut proxy_lane = Vec::<ProxyNode>::new();
 
         // insert each key into the corresponding fast lanes
         let mut current_proxy = ProxyNode { keys: Vec::<u32>::with_capacity(filtered_skip) };
 
-        for k in copy_keys {
+        for k in sorted_keys {
             let idx_item = nodes.len();
-            nodes.push(k);
-            for l in 0..max_level {
-                if (idx_item % filtered_skip.pow((l + 1) as u32)) == 0 {
-                    fast_lane_buffer[l].push(k);
+            nodes.push(k.clone());
+            for level in 0..max_level {
+                if (idx_item % filtered_skip.pow((level + 1) as u32)) == 0 {
+                    fast_lanes[level].push(k.clone());
                 } else {
                     break;
                 }
             }
             // insert into proxy lane
-            current_proxy.keys.push(k);
+            current_proxy.keys.push(k.clone());
             if idx_item % filtered_skip == (filtered_skip - 1) {
                 proxy_lane.push(current_proxy);
                 current_proxy = ProxyNode { keys: Vec::<u32>::with_capacity(filtered_skip) };
             }
         }
+
+        for i in 0..fast_lanes.len() {
+            let lane = &mut fast_lanes[i];
+            let modulo = lane.len() % MIN_FAST_LANE_SIZE;
+            if modulo > 0 {
+                for _ in 0..(MIN_FAST_LANE_SIZE - modulo) {
+                    lane.push(u32::max_value())
+                }
+            }
+
+        }
+
         // add the last proxy as well
         proxy_lane.push(current_proxy);
-
-        let mut level_start_pos = vec![0; max_level];
-        let mut level_num_items = vec![0; max_level];
-        // linearize all the fast lanes
-        let mut linearized_fast_lanes = Vec::<u32>::new();
-        for level in (0..max_level).rev() {
-            level_start_pos[level] = linearized_fast_lanes.len();
-            level_num_items[level] = fast_lane_buffer[level].len();
-            linearized_fast_lanes.append(&mut fast_lane_buffer[level]);
-        }
 
 
         // create the SkipList datastructure
@@ -107,51 +105,32 @@ impl SkipList {
             max_level: max_level,
             skip: filtered_skip,
             proxy_lane: proxy_lane,
-            linearized_fast_lanes: linearized_fast_lanes,
+            fast_lanes: fast_lanes,
             nodes: nodes,
-            level_start_pos: level_start_pos,
-            level_num_items: level_num_items,
         };
     }
-
-
-    pub fn get_nodes(&self) -> &[u32] {
-        return &self.nodes;
-    }
-
 
     pub fn find(&self, key: u32) -> Option<usize> {
 
         // binary search for the starting position in the top lane
-        let top_start_pos = self.level_start_pos[self.max_level - 1];
-        let top_end_pos = top_start_pos + self.level_num_items[self.max_level - 1];
-        let top_lane = &self.linearized_fast_lanes[top_start_pos..top_end_pos];
-        let mut pos = top_start_pos + binary_search(key, top_lane);
+        let mut pos = binary_search(key, &self.fast_lanes[self.max_level - 1]);
 
         for level in (0..(self.max_level - 1)).rev() {
-            let mut relative_pos = pos - self.level_start_pos[level];
-            while relative_pos < self.level_num_items[level] &&
-                  key >= self.linearized_fast_lanes[pos + 1] {
+            pos = self.skip * pos;
+            while pos < self.fast_lanes[level].len() && key >= self.fast_lanes[level][pos + 1] {
                 pos += 1;
-                relative_pos += 1;
             }
-            if level == 0 {
-                break;
-            }
-            // reset the pos to the next level offset
-            pos = self.level_start_pos[level - 1] + self.skip * relative_pos;
         }
-        let relative_pos = pos - self.level_start_pos[0];
 
-        if key == self.linearized_fast_lanes[pos] {
+        if key == self.fast_lanes[0][pos] {
             // the key is directly included in  the level 1 fast lane, calculate the position of the key in the original list
-            return Some(self.skip * relative_pos);
+            return Some(self.skip * pos);
         };
         // get the proxy node and find the key inside it
-        let proxy = &self.proxy_lane[pos - self.level_start_pos[0]];
+        let proxy = &self.proxy_lane[pos];
         for i in 1..proxy.keys.len() {
             if key == proxy.keys[i] {
-                return Some((self.skip * relative_pos) + i);
+                return Some((self.skip * pos) + i);
             }
         }
         return None;
@@ -162,30 +141,12 @@ impl SkipList {
 mod tests {
 
     #[test]
-    fn insert_retrieve_sorted() {
-        let vals = [2, 1, 3, 10, 0];
-        let slist = super::SkipList::new(3, 2, &vals);
-
-        let sorted = slist.get_nodes();
-
-        assert_eq!(0, sorted[0]);
-        assert_eq!(1, sorted[1]);
-        assert_eq!(2, sorted[2]);
-        assert_eq!(3, sorted[3]);
-        assert_eq!(10, sorted[4]);
-
-    }
-
-    #[test]
     fn find_single() {
-        let vals = [2, 1, 3, 10, 0];
-        let slist = super::SkipList::new(3, 2, &vals);
+        let sorted = [0, 1, 2, 3, 10, 20, 23, 24, 25, 26, 40, 400, 421, 422, 423];
+        let slist = super::SkipList::new(3, 2, &sorted);
 
-        assert_eq!(Some(0), slist.find(2));
-        assert_eq!(Some(1), slist.find(1));
-        assert_eq!(Some(2), slist.find(3));
-        assert_eq!(Some(3), slist.find(10));
-        assert_eq!(Some(4), slist.find(0));
-
+        for idx in 0..sorted.len() {
+            assert_eq!(Some(idx), slist.find(sorted[idx]));
+        }
     }
 }
