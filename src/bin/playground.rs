@@ -5,7 +5,7 @@ fn main() {
     let slist = cssl::skiplist::SkipList::new(3, 2, &vals[0..vals.len()]);
 
 
-    let r = slist.find_range(1,1);
+    let r = slist.find_range(0,423);
     assert_eq!(true, r.is_some());
     let v = r.unwrap();
     println!("{}..{}", v.start, v.end);

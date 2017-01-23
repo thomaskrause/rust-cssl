@@ -17,6 +17,8 @@ use std::ops::Range;
 const MAX_SKIP: usize = 5;
 const MIN_FAST_LANE_SIZE: usize = 16;
 
+const RANGE_SEARCH_BLOCK_SIZE: usize = 8;
+
 struct ProxyNode {
     keys: Vec<u32>,
 }
@@ -169,9 +171,27 @@ impl SkipList {
                 let mut end_pos = start_pos / self.skip;
                 let bottom_lane =
                     &self.linearized_fast_lanes[self.fast_lane_start[0]..self.fast_lane_end[0]];
-                for i in (end_pos + 1)..bottom_lane.len() {
-                    if bottom_lane[i] > end {
-                        end_pos = i - 1;
+
+                let num_of_search_blocks = bottom_lane.len() / RANGE_SEARCH_BLOCK_SIZE;
+                let start_search_block = ((start_pos / self.skip) + 1) / RANGE_SEARCH_BLOCK_SIZE;
+    
+                for b in start_search_block..num_of_search_blocks {
+                    let mut found_end = false;
+                    let block_offset = b*RANGE_SEARCH_BLOCK_SIZE;
+                    // Always search a fixed number of items to allow the auto vectorization to optimize this loop
+                    // Any more complex logic (like breaks) would lead to a non-vectorization.
+                    for i in 0..RANGE_SEARCH_BLOCK_SIZE {
+                        found_end = found_end || bottom_lane[block_offset+i] > end;
+                    }
+                    if found_end {
+                        // do a search inside the last block to find the exact location
+                        end_pos = b*RANGE_SEARCH_BLOCK_SIZE;
+                        for i in 0..RANGE_SEARCH_BLOCK_SIZE {
+                            if bottom_lane[block_offset+i] > end {
+                                end_pos = block_offset+i-1;
+                                break;
+                            }
+                        }
                         break;
                     }
                 }
@@ -212,7 +232,7 @@ mod tests {
 
         for start in 0..sorted.len() {
             for end in start..sorted.len() {
-                //println!("Running find_range1 test with start: {}, end: {}", sorted[start], sorted[end]);
+                println!("Running find_range1 test with start: {}, end: {}", sorted[start], sorted[end]);
                 let found = slist.find_range(sorted[start], sorted[end]);
 
                 assert_eq!(true, found.is_some());
