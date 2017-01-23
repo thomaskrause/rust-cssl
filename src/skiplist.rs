@@ -140,7 +140,7 @@ impl SkipList {
             pos = self.skip * pos;
             let lane =
                 &self.linearized_fast_lanes[self.fast_lane_start[level]..self.fast_lane_end[level]];
-            while pos < lane.len() && key >= lane[pos + 1] {
+            while (pos+1) < lane.len() && key >= lane[pos + 1] {
                 pos += 1;
             }
         }
