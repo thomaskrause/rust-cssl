@@ -63,8 +63,10 @@ fn main() {
     let start_time_range = time::precise_time_s();
     for k in &range_keys[..] {
         let found = slist.find_range(*k, *k + r_size);
-        let found_range = found.unwrap();
-        assert!(keys[found_range.start] >= *k && keys[found_range.end] <= (*k+r_size));
+        if found.is_some() {
+            let found_range = found.unwrap();
+            assert!(keys[found_range.start] >= *k && keys[found_range.end-1] <= (*k+r_size));
+        }
     }
     let end_time_range = time::precise_time_s();
     println!("Range: {} ops/s.", (num_elements as f64) / (end_time_range - start_time_range));
