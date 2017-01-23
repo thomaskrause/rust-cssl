@@ -12,6 +12,8 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 
+use std::ops::Range;
+
 const MAX_SKIP: usize = 5;
 const MIN_FAST_LANE_SIZE: usize = 16;
 
@@ -134,13 +136,15 @@ impl SkipList {
 
         for level in (0..(self.max_level - 1)).rev() {
             pos = self.skip * pos;
-            let lane =  &self.linearized_fast_lanes[self.fast_lane_start[level]..self.fast_lane_end[level]];
+            let lane =
+                &self.linearized_fast_lanes[self.fast_lane_start[level]..self.fast_lane_end[level]];
             while pos < lane.len() && key >= lane[pos + 1] {
                 pos += 1;
             }
         }
 
-        let bottom_lane = &self.linearized_fast_lanes[self.fast_lane_start[0]..self.fast_lane_end[0]];
+        let bottom_lane =
+            &self.linearized_fast_lanes[self.fast_lane_start[0]..self.fast_lane_end[0]];
         if key == bottom_lane[pos] {
             // the key is directly included in  the level 1 fast lane, calculate the position of the key in the original list
             return Some(self.skip * pos);
@@ -154,6 +158,38 @@ impl SkipList {
         }
         return None;
     }
+
+    pub fn find_range(&self, start: u32, end: u32) -> Option<Range<usize>> {
+
+        // find the start pos similar to find()
+        let start_search = self.find(start);
+        match start_search {
+            Some(start_pos) => {
+                // find the upper end in the lowest lane
+                let mut end_pos = start_pos / self.skip;
+                let bottom_lane =
+                    &self.linearized_fast_lanes[self.fast_lane_start[0]..self.fast_lane_end[0]];
+                for i in (end_pos + 1)..bottom_lane.len() {
+                    if bottom_lane[i] > end {
+                        end_pos = i - 1;
+                        break;
+                    }
+                }
+                // get the proxy node and find the key inside it
+                let proxy = &self.proxy_lane[end_pos];
+                let mut proxy_offset = proxy.keys.len()-1;
+                for i in 1..proxy.keys.len() {
+                    if proxy.keys[i] > end {
+                        proxy_offset = i - 1;
+                        break;
+                    }
+                }
+
+                return Some(start_pos..((self.skip * end_pos) + proxy_offset)+1);
+            }
+            None => return None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -166,6 +202,25 @@ mod tests {
 
         for idx in 0..sorted.len() {
             assert_eq!(Some(idx), slist.find(sorted[idx]));
+        }
+    }
+
+    #[test]
+    fn find_range1() {
+        let sorted = [0, 1, 2, 3, 10, 20, 23, 24, 25, 26, 40, 400, 421, 422, 423];
+        let slist = super::SkipList::new(3, 2, &sorted[0..sorted.len()]);
+
+        for start in 0..sorted.len() {
+            for end in start..sorted.len() {
+                //println!("Running find_range1 test with start: {}, end: {}", sorted[start], sorted[end]);
+                let found = slist.find_range(sorted[start], sorted[end]);
+
+                assert_eq!(true, found.is_some());
+                let v = found.unwrap();
+                assert_eq!(start, v.start);
+                assert_eq!(end, v.end-1);
+                
+            }
         }
     }
 }
