@@ -37,7 +37,7 @@ fn main() {
     let start_time_insert = time::precise_time_s();
     let slist = cssl::skiplist::SkipList::new(9, 5, &keys);
     let end_time_insert = time::precise_time_s();
-    println!("Insertion: {} ops/s.", (num_elements as f64) / (end_time_insert - start_time_insert));
+    println!("Insertion: {} ops/s.", ((num_elements as f64) / (end_time_insert - start_time_insert)) as u64 );
 
     let mut random_keys = keys.clone();
     rng.shuffle(&mut random_keys[..]);
@@ -52,7 +52,7 @@ fn main() {
         }
     }
     let end_time_lookup = time::precise_time_s();
-    println!("Lookup: {} ops/s.", (num_elements as f64) / (end_time_lookup - start_time_lookup));
+    println!("Lookup:    {} ops/s.", ((num_elements as f64) / (end_time_lookup - start_time_lookup)) as u64 ) ;
 
     let m = 1000000;
     let mut range_keys = Vec::<u32>::with_capacity(m);
@@ -69,5 +69,5 @@ fn main() {
         }
     }
     let end_time_range = time::precise_time_s();
-    println!("Range: {} ops/s.", (num_elements as f64) / (end_time_range - start_time_range));
+    println!("Range:     {} ops/s.", ((num_elements as f64) / (end_time_range - start_time_range)) as u64);
 }

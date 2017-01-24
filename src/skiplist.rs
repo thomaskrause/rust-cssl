@@ -46,6 +46,7 @@ fn binary_search(key: u32, lane: &[u32]) -> usize {
             return middle;
         } else {
             if middle == 0 {
+                last = middle;
                 break;
             } else {
                 last = middle - 1;
