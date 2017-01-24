@@ -29,7 +29,7 @@ fn main() {
     } else {
         // sparse (random)
         for _ in 0..num_elements {
-            keys.push(rng.next_u32());
+            keys.push(rng.next_u32() % ((32767/2-1) + 1));
         }
         keys.sort();
     }
@@ -45,6 +45,7 @@ fn main() {
     let repeat=100000000/num_elements;
     
     let start_time_lookup = time::precise_time_s();
+    
     for _ in 0..repeat {
         for k in &random_keys[..] {
             let found = slist.find(*k);
@@ -53,7 +54,7 @@ fn main() {
     }
     let end_time_lookup = time::precise_time_s();
     println!("Lookup:    {} ops/s.", ((num_elements as f64) / (end_time_lookup - start_time_lookup)) as u64 ) ;
-
+    
     let m = 1000000;
     let mut range_keys = Vec::<u32>::with_capacity(m);
     for _ in 0..m {
