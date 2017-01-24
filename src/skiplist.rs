@@ -55,7 +55,7 @@ fn binary_search(key: u32, lane: &[u32]) -> usize {
     }
 
     // exact key not found, return the nearest starting point
-    if first > last { return last } else { return 0 }
+    if first > last { return last } else { return first }
 }
 
 impl SkipList {
@@ -231,6 +231,17 @@ mod tests {
     }
 
     #[test]
+    fn find_single_not_included() {
+        let sorted = [0, 1, 2, 3, 10, 20, 23, 24, 25, 26, 40, 400, 421, 422, 423];
+        let slist = super::SkipList::new(3, 2, &sorted);
+
+        assert_eq!(None, slist.find(22));
+        assert_eq!(None, slist.find(4));
+        assert_eq!(None, slist.find(500));
+
+    }
+
+    #[test]
     fn find_range1() {
         let sorted = [0, 1, 2, 3, 10, 20, 23, 24, 25, 26, 40, 400, 421, 422, 423];
         let slist = super::SkipList::new(3, 2, &sorted[0..sorted.len()]);
@@ -247,5 +258,13 @@ mod tests {
                 
             }
         }
+    }
+
+    #[test]
+    fn find_range_not_included() {
+        let sorted = [0, 1, 2, 3, 10, 20, 23, 24, 25, 26, 40, 400, 421, 422, 423];
+        let slist = super::SkipList::new(3, 2, &sorted[0..sorted.len()]);
+
+        assert_eq!(None, slist.find_range(500, 600));
     }
 }
